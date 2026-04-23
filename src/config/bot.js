@@ -112,18 +112,18 @@ export const botConfig = {
 
       // Feature-specific colors.
       giveaway: {
-        active: "#57F287",
-        ended: "#ED4245",
+        active: "FF0000",
+        ended: "FF0000",
       },
       ticket: {
-        open: "#57F287",
-        claimed: "#FAA61A",
-        closed: "#ED4245",
-        pending: "#99AAB5",
+        open: "FF0000",
+        claimed: "FF0000",
+        closed: "FF0000",
+        pending: "FF0000",
       },
-      economy: "#F1C40F",
-      birthday: "#E91E63",
-      moderation: "#9B59B6",
+      economy: "FF0000",
+      birthday: "FF0000",
+      moderation: "FF0000",
 
       // Ticket priority color mapping.
       priority: {
@@ -201,10 +201,10 @@ export const botConfig = {
   // =========================
   tickets: {
     // Category ID where new tickets are created (null = no forced category).
-    defaultCategory: null,
+    defaultCategory: 1474582957334204607,
 
     // Role IDs allowed to manage/support tickets.
-    supportRoles: [],
+    supportRoles: [1474582829248544779],
 
     // Priority options users/staff can assign.
     priorities: {
@@ -242,7 +242,7 @@ export const botConfig = {
     archiveCategory: null,
 
     // Channel ID where ticket logs are sent.
-    logChannel: null,
+    logChannel: 1474583034853589047,
   },
 
   // =========================
@@ -264,7 +264,7 @@ export const botConfig = {
     maximumDuration: 2592000000, 
 
     // Role IDs allowed to host giveaways.
-    allowedRoles: [],
+    allowedRoles: [1474582829248544779],
 
     // Role IDs that bypass giveaway restrictions.
     bypassRoles: [],
@@ -365,7 +365,7 @@ export const botConfig = {
     defaultGoodbyeMessage:
       "{user} has left the server. We now have {memberCount} members.",
     // Channel ID for welcome messages.
-    defaultWelcomeChannel: null,
+    defaultWelcomeChannel: 1474582967107190906,
     // Channel ID for goodbye messages.
     defaultGoodbyeChannel: null,
   },
