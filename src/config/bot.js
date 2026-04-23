@@ -94,7 +94,7 @@ export const botConfig = {
       // Standard status colors for success/error/warning/info messages.
       success: "#57F287", 
       error: "#ED4245", 
-      warning: "#FEE75C", 
+      warning: "FF0000", 
       info: "#3498DB", 
 
       // Neutral utility colors.
