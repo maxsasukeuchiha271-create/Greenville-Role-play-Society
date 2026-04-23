@@ -27,7 +27,7 @@ export const botConfig = {
         // Text users will see (example: "Playing /help | Titan Bot").
         name: "Welcome to Greenville Roleplay Society (GVRS).We are a premier roleplay community committed to delivering a high-quality, realistic. Our community emphasizes professionalism, structure, and immersive scenarios across all departments",
         // Activity type number (0 = Playing).
-        type: 0, 
+        type: 4, 
       },
     ],
   },
@@ -88,8 +88,8 @@ export const botConfig = {
   embeds: {
     colors: {
       // Main brand colors.
-      primary: "#336699", 
-      secondary: "#2F3136", 
+      primary: "#FF0000", 
+      secondary: "#FF0000", 
 
       // Standard status colors for success/error/warning/info messages.
       success: "#57F287", 
