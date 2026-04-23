@@ -25,7 +25,7 @@ export const botConfig = {
     activities: [
       {
         // Text users will see (example: "Playing /help | Titan Bot").
-        name: "Made with ❤️",
+        name: "Welcome to Greenville Roleplay Society (GVRS).We are a premier roleplay community committed to delivering a high-quality, realistic. Our community emphasizes professionalism, structure, and immersive scenarios across all departments",
         // Activity type number (0 = Playing).
         type: 0, 
       },
