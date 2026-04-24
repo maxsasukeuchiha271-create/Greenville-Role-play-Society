@@ -107,13 +107,13 @@ export const botConfig = {
       green: "#57F287",
       yellow: "#FEE75C",
       fuchsia: "#EB459E",
-      red: "#ED4245",
+      red: "#ff0000",
       black: "#000000",
 
       // Feature-specific colors.
       giveaway: {
-        active: "FF0000",
-        ended: "FF0000",
+        active: "ff0000",
+        ended: "ff0000",
       },
       ticket: {
         open: "ff0000",
