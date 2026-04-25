@@ -85,7 +85,7 @@ export const botConfig = {
   // EMBED COLORS & BRANDING
   // =========================
   // IMPORTANT: This is the SINGLE SOURCE OF TRUTH for all bot colors
-  embeds: {
+  embeds: {d
     colors: {
       // Main brand colors.
       primary: "#ff0001", 
