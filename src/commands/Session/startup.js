@@ -1,136 +1,129 @@
-import { SlashCommandBuilder } from 'discord.js';
-import { createEmbed } from '../../utils/embeds.js';
-import { PermissionsBitField } from 'discord.js';
+import discord
+from discord import app_commands
+from discord.ext import commands
+import time
+from utils import format_embed
 
-/**
- * /startup required_reactions: int
- * Checks staff role from guild config, enforces allowed channels from guild config,
- * posts the startup embed, pings everyone and stores session state/pending sessions on the client.
- */
-export default {
-  slashOnly: true,
-  data: new SlashCommandBuilder()
-    .setName('startup')
-    .setDescription('Start a roleplay session')
-    .addIntegerOption((opt) =>
-      opt
-        .setName('required_reactions')
-        .setDescription('Number of reactions needed to start the session')
-        .setRequired(true)
-        .setMinValue(1),
-    ),
+STAFF_TEAM_ROLE_ID = 1502772079953711275
 
-  category: 'Session',
+async def correct_channel(interaction: discord.Interaction) -> bool:
+    channels = interaction.client.config['channels']
+    id1 = channels.get('session_commands_channel_id')
+    id2 = channels.get('session_commands_channel_id_2')
+    if str(interaction.channel_id) not in [str(id1), str(id2)]:
+        await interaction.response.send_message(
+            f" This command can only be used in <#{id1}> or <#{id2}>.", ephemeral=True
+        )
+        return False
+    return True
 
-  async execute(interaction, guildConfig = {}, client) {
-    const required = interaction.options.getInteger('required_reactions');
+def _embed_cfg(client, key):
+    return client.config.get('embeds', {}).get(key, {})
 
-    // Resolve staff role ID from multiple fallbacks
-    const staffRoleId = String(
-      guildConfig?.roles?.staff_team ||
-        // appConfig.bot spreads botConfig into client.config.bot
-        client?.config?.bot?.roles?.staff_team ||
-        client?.config?.roles?.staff_team ||
-        process.env.STAFF_ROLE_ID ||
-        ''
-    );
+class Startup(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        if not hasattr(bot, 'session_states'):
+            bot.session_states = {}
 
-    // If no staff role configured, inform admins how to configure it
-    if (!staffRoleId) {
-      // Allow Administrator users to run if no staff role is configured
-      const isAdmin = interaction.member?.permissions?.has?.(PermissionsBitField.Flags.Administrator);
-      if (!isAdmin) {
-        await interaction.reply({ content: 'Only staff team members can use this command. No staff role is configured for this server. Ask an administrator to set `roles.staff_team` in server config or set STAFF_ROLE_ID in the bot config.', ephemeral: true });
-        return;
-      }
-    }
+    @app_commands.command(name="startup", description="Start a roleplay session")
+    @app_commands.describe(required_reactions="Number of reactions needed to start the session")
+    async def startup(self, ctx: discord.Interaction, required_reactions: int):
+        configured_staff_role_id = int(ctx.client.config['roles']['staff_team'])
+        allowed_role_ids = {configured_staff_role_id, STAFF_TEAM_ROLE_ID}
+        user_role_ids = {role.id for role in ctx.user.roles}
+        if not (allowed_role_ids & user_role_ids):
+            await ctx.response.send_message(" Only staff team members can use this command.", ephemeral=True)
+            return
+        if not await correct_channel(ctx):
+            return
 
-    // Ensure we have an up-to-date GuildMember (handles partial/cached members)
-    let member = interaction.member;
-    try {
-      if (!member || !member.roles) {
-        member = await interaction.guild.members.fetch(interaction.user.id);
-      } else if (member.fetch) {
-        // refresh to ensure roles cache is current
-        member = await member.fetch().catch(() => member);
-      }
-    } catch (err) {
-      // If fetch fails, keep the original member (may be partial)
-    }
+        ecfg = _embed_cfg(ctx.client, 'startup')
+        embed = discord.Embed(
+            title=ecfg.get('title', '_Greenville Roleplay Legacy_ - ___Session Startup___'),
+            description=format_embed(ecfg.get('description', ''), ctx.client, user=ctx.user.mention, required=required_reactions),
+            color=0xadcf8b
+        )
+        image_url = ecfg.get('image_url', '')
+        if image_url:
+            embed.set_image(url=image_url)
+        embed.set_footer(
+            text=ctx.client.config['bot']['footer_text'],
+            icon_url=ctx.client.config['bot']['footer_icon']
+        )
 
-    // If staffRoleId is set, verify the member has the role
-    if (staffRoleId) {
-      const hasStaff = Boolean(member && member.roles && member.roles.cache && member.roles.cache.has(staffRoleId));
-      const isAdmin = member?.permissions?.has?.(PermissionsBitField.Flags.Administrator);
+        await ctx.response.send_message(" Startup initiated.", ephemeral=True)
+        message = await ctx.channel.send(content="@everyone", embed=embed, allowed_mentions=discord.AllowedMentions(everyone=True))
+        await message.add_reaction("<:pinkcheckmark:1502780778449342494>")
 
-      if (!hasStaff && !isAdmin) {
-        await interaction.reply({ content: `Only staff team members can use this command. You need the staff role <@&${staffRoleId}> to run this command.`, ephemeral: true });
-        return;
-      }
-    }
+        self.bot.session_states[ctx.channel_id] = {
+            'message_id': message.id,
+            'time': int(time.time()),
+            'completed': True,
+            'reactors': set()
+        }
+        self.bot.pending_sessions[message.id] = {
+            'type': 'startup',
+            'required': required_reactions,
+            'user': ctx.user.mention
+        }
 
-    // Enforce allowed channels from guild config: channels.session_commands_channel_id / _2
-    const channels = guildConfig?.channels || {};
-    const allowed1 = String(channels.session_commands_channel_id || '');
-    const allowed2 = String(channels.session_commands_channel_id_2 || '');
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload):
+        if payload.user_id == self.bot.user.id:
+            return
 
-    if (allowed1 && allowed2 && ![String(interaction.channelId), String(allowed1), String(allowed2)].includes(String(interaction.channelId))) {
-      await interaction.reply({
-        content: `This command can only be used in <#${allowed1}> or <#${allowed2}>.`,
-        ephemeral: true,
-      });
-      return;
-    }
+        emoji_str = str(payload.emoji)
+        target_emoji = "<:pinkcheckmark:1502780778449342494>"
 
-    // Build embed from guild embed config (keys: embeds.startup)
-    const ecfg = (guildConfig?.embeds && guildConfig.embeds.startup) || {};
-    const title = ecfg.title || '_Greenville Roleplay Legacy_ - ___Session Startup___';
-    // replace placeholders {user} and {required} if present
-    let description = ecfg.description || '';
-    description = description.replace(/\{user\}/g, interaction.user?.toString() || '')
-                             .replace(/\{required\}/g, String(required));
-    const embed = createEmbed({
-      title,
-      description,
-      color: 'success',
-    });
-    if (ecfg.image_url) embed.setImage(ecfg.image_url);
-    embed.setFooter({ text: guildConfig?.bot?.footer_text || '', iconURL: guildConfig?.bot?.footer_icon || '' });
+        if hasattr(self.bot, 'session_states'):
+            for state in self.bot.session_states.values():
+                if payload.message_id == state['message_id'] and emoji_str == target_emoji:
+                    state['reactors'].add(payload.user_id)
+                    break
 
-    // Reply to invoker, then post the announcement (ping everyone)
-    await interaction.reply({ content: 'Startup initiated.', ephemeral: true });
+        if payload.message_id not in self.bot.pending_sessions:
+            return
 
-    const channel = interaction.channel;
-    const announcement = await channel.send({
-      content: '@everyone',
-      embeds: [embed],
-      allowedMentions: { parse: ['everyone'] },
-    });
+        data = self.bot.pending_sessions[payload.message_id]
+        if data.get('type') != 'startup' or emoji_str != target_emoji:
+            return
 
-    // Add reaction (custom emoji string works: <:name:id>)
-    const targetEmoji = '<:pinkcheckmark:1502780778449342494>';
-    try {
-      await announcement.react(targetEmoji);
-    } catch (err) {
-      // ignore reaction errors
-    }
+        channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
+        message = await channel.fetch_message(payload.message_id)
 
-    // Ensure client-side stores exist
-    if (!client.sessionStates) client.sessionStates = new Map();
-    if (!client.pendingSessions) client.pendingSessions = new Map();
+        reaction = next((r for r in message.reactions if str(r) == target_emoji), None)
+        if reaction is None:
+            return
 
-    // Save session state and pending session entry
-    client.sessionStates.set(String(channel.id), {
-      messageId: announcement.id,
-      time: Math.floor(Date.now() / 1000),
-      completed: true,
-      reactors: new Set(),
-    });
+        users = [u async for u in reaction.users() if not u.bot]
+        if len(users) < data['required']:
+            return
 
-    client.pendingSessions.set(String(announcement.id), {
-      type: 'startup',
-      required,
-      user: interaction.user?.toString() || interaction.user?.tag || 'unknown',
-    });
-  },
-};
+        ecfg = _embed_cfg(self.bot, 'setup')
+        embed = discord.Embed(
+            title=ecfg.get('title', '_Greenville Roleplay Legacy_ - ___Roleplay Preparation:___'),
+            description=format_embed(ecfg.get('description', ''), self.bot, user=data['user']),
+            color=0xadcf8b
+        )
+        image_url = ecfg.get('image_url', '')
+        if image_url:
+            embed.set_image(url=image_url)
+        embed.set_footer(
+            text=self.bot.config['bot']['footer_text'],
+            icon_url=self.bot.config['bot']['footer_icon']
+        )
+        await channel.send(embed=embed)
+        del self.bot.pending_sessions[payload.message_id]
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_remove(self, payload):
+        target_emoji = "<:pinkcheckmark:1502780778449342494>"
+        if hasattr(self.bot, 'session_states'):
+            for state in self.bot.session_states.values():
+                if payload.message_id == state['message_id'] and str(payload.emoji) == target_emoji:
+                    state['reactors'].discard(payload.user_id)
+                    break
+
+async def setup(bot):
+    await bot.add_cog(Startup(bot))
