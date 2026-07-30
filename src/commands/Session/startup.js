@@ -1,5 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { createEmbed } from '../../utils/embeds.js';
+import { PermissionsBitField } from 'discord.js';
 
 /**
  * /startup required_reactions: int
@@ -24,20 +25,48 @@ export default {
   async execute(interaction, guildConfig = {}, client) {
     const required = interaction.options.getInteger('required_reactions');
 
-    // Resolve staff role ID from guild config: config.roles.staff_team
-    // Fallbacks: guild config -> client.config.roles.staff_team -> env STAFF_ROLE_ID
+    // Resolve staff role ID from multiple fallbacks
     const staffRoleId = String(
       guildConfig?.roles?.staff_team ||
+        // appConfig.bot spreads botConfig into client.config.bot
+        client?.config?.bot?.roles?.staff_team ||
         client?.config?.roles?.staff_team ||
-        client?.config?.bot?.staff_team ||
         process.env.STAFF_ROLE_ID ||
         ''
     );
-    const memberRoles = interaction.member?.roles?.cache;
 
-    if (!staffRoleId || !(memberRoles && memberRoles.has && memberRoles.has(staffRoleId))) {
-      await interaction.reply({ content: 'Only staff team members can use this command. (Staff role not assigned)', ephemeral: true });
-      return;
+    // If no staff role configured, inform admins how to configure it
+    if (!staffRoleId) {
+      // Allow Administrator users to run if no staff role is configured
+      const isAdmin = interaction.member?.permissions?.has?.(PermissionsBitField.Flags.Administrator);
+      if (!isAdmin) {
+        await interaction.reply({ content: 'Only staff team members can use this command. No staff role is configured for this server. Ask an administrator to set `roles.staff_team` in server config or set STAFF_ROLE_ID in the bot config.', ephemeral: true });
+        return;
+      }
+    }
+
+    // Ensure we have an up-to-date GuildMember (handles partial/cached members)
+    let member = interaction.member;
+    try {
+      if (!member || !member.roles) {
+        member = await interaction.guild.members.fetch(interaction.user.id);
+      } else if (member.fetch) {
+        // refresh to ensure roles cache is current
+        member = await member.fetch().catch(() => member);
+      }
+    } catch (err) {
+      // If fetch fails, keep the original member (may be partial)
+    }
+
+    // If staffRoleId is set, verify the member has the role
+    if (staffRoleId) {
+      const hasStaff = Boolean(member && member.roles && member.roles.cache && member.roles.cache.has(staffRoleId));
+      const isAdmin = member?.permissions?.has?.(PermissionsBitField.Flags.Administrator);
+
+      if (!hasStaff && !isAdmin) {
+        await interaction.reply({ content: `Only staff team members can use this command. You need the staff role <@&${staffRoleId}> to run this command.`, ephemeral: true });
+        return;
+      }
     }
 
     // Enforce allowed channels from guild config: channels.session_commands_channel_id / _2
@@ -45,7 +74,7 @@ export default {
     const allowed1 = String(channels.session_commands_channel_id || '');
     const allowed2 = String(channels.session_commands_channel_id_2 || '');
 
-    if (![String(interaction.channelId), String(allowed1), String(allowed2)].includes(String(interaction.channelId))) {
+    if (allowed1 && allowed2 && ![String(interaction.channelId), String(allowed1), String(allowed2)].includes(String(interaction.channelId))) {
       await interaction.reply({
         content: `This command can only be used in <#${allowed1}> or <#${allowed2}>.`,
         ephemeral: true,
@@ -79,12 +108,11 @@ export default {
     });
 
     // Add reaction (custom emoji string works: <:name:id>)
-    const targetEmoji = '<:pinkcheckmark:1502780778449342494>'; // same emoji used in your python
+    const targetEmoji = '<:pinkcheckmark:1502780778449342494>';
     try {
       await announcement.react(targetEmoji);
     } catch (err) {
-      // Reaction might fail if emoji not available; ignore silently
-      // If you have a logger, you can log this error
+      // ignore reaction errors
     }
 
     // Ensure client-side stores exist
