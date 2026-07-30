@@ -25,11 +25,18 @@ export default {
     const required = interaction.options.getInteger('required_reactions');
 
     // Resolve staff role ID from guild config: config.roles.staff_team
-    const staffRoleId = String(guildConfig?.roles?.staff_team || '');
+    // Fallbacks: guild config -> client.config.roles.staff_team -> env STAFF_ROLE_ID
+    const staffRoleId = String(
+      guildConfig?.roles?.staff_team ||
+        client?.config?.roles?.staff_team ||
+        client?.config?.bot?.staff_team ||
+        process.env.STAFF_ROLE_ID ||
+        ''
+    );
     const memberRoles = interaction.member?.roles?.cache;
 
     if (!staffRoleId || !(memberRoles && memberRoles.has && memberRoles.has(staffRoleId))) {
-      await interaction.reply({ content: 'Only staff team members can use this command.', ephemeral: true });
+      await interaction.reply({ content: 'Only staff team members can use this command. (Staff role not assigned)', ephemeral: true });
       return;
     }
 

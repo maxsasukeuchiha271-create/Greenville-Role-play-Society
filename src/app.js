@@ -388,5 +388,3 @@ try {
   logger.error('Fatal error during bot startup:', error);
   process.exit(1);
 }
-
-export default TitanBot;
