@@ -18,6 +18,13 @@ export default {
   async execute(member) {
     try {
         const { guild, user } = member;
+
+        // DEBUG: mark entry into handler
+        try {
+          console.log(`[join-bonus] handler entered for ${user?.tag || user?.id} in guild ${guild?.id}`);
+        } catch (e) {
+          // ignore logging errors
+        }
         
         const config = await getGuildConfig(member.client, guild.id);
         
@@ -166,12 +173,17 @@ export default {
                 }
             }
 
+            // DEBUG: log alreadyGiven
+            try { console.log(`[join-bonus] alreadyGiven=${alreadyGiven} for ${user.id} in ${guild.id}`); } catch(e){}
+
             if (!alreadyGiven) {
                 try {
+                    console.log(`[join-bonus] attempting to add ${JOIN_BONUS_AMOUNT} to ${user.id}`);
                     await updateBalance(client, guild.id, user.id, { wallet: JOIN_BONUS_AMOUNT });
+                    console.log(`[join-bonus] updateBalance completed for ${user.id}`);
                     logger.info(`Gave join bonus $${JOIN_BONUS_AMOUNT.toLocaleString()} to ${user.id} in guild ${guild.id}`);
                 } catch (e) {
-                    logger.error('Failed to add join bonus to user balance:', e);
+                    console.error('Failed to add join bonus to user balance:', e);
                 }
 
                 if (client.db && typeof client.db.set === 'function') {
