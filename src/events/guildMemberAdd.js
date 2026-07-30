@@ -7,6 +7,9 @@ import { logEvent, EVENT_TYPES } from '../services/loggingService.js';
 import { getServerCounters, updateCounter } from '../services/serverstatsService.js';
 import { setBirthday as dbSetBirthday } from '../utils/database.js';
 import { logger } from '../utils/logger.js';
+import { updateBalance } from '../utils/economy.js';
+
+const JOIN_BONUS_AMOUNT = 50000;
 
 export default {
   name: Events.GuildMemberAdd,
@@ -149,6 +152,46 @@ export default {
         } catch (error) {
             logger.debug('Error updating counters on member join:', error);
         }
+
+        // --- JOIN BONUS: give 50,000 once using the repo economy ---
+        try {
+            const client = member.client;
+            const flagKey = `joinedBonus:${guild.id}:${user.id}`;
+            let alreadyGiven = false;
+            if (client.db && typeof client.db.get === 'function') {
+                try {
+                    alreadyGiven = await client.db.get(flagKey, false);
+                } catch (e) {
+                    logger.debug('Could not read join bonus flag from DB:', e);
+                }
+            }
+
+            if (!alreadyGiven) {
+                try {
+                    await updateBalance(client, guild.id, user.id, { wallet: JOIN_BONUS_AMOUNT });
+                    logger.info(`Gave join bonus $${JOIN_BONUS_AMOUNT.toLocaleString()} to ${user.id} in guild ${guild.id}`);
+                } catch (e) {
+                    logger.error('Failed to add join bonus to user balance:', e);
+                }
+
+                if (client.db && typeof client.db.set === 'function') {
+                    try {
+                        await client.db.set(flagKey, true);
+                    } catch (e) {
+                        logger.warn('Could not set join bonus flag in DB:', e);
+                    }
+                }
+
+                // Attempt to DM the user
+                try {
+                    await user.send(`Welcome to ${guild.name}! You have been awarded $${JOIN_BONUS_AMOUNT.toLocaleString()} as a join bonus. 🎉`);
+                } catch (dmErr) {
+                    logger.debug('Join bonus DM failed (user may have DMs off):', dmErr);
+                }
+            }
+        } catch (err) {
+            logger.error('Error giving join bonus on member join:', err);
+        }
         
         // Restore birthday data if the member previously left
         try {
@@ -170,6 +213,7 @@ export default {
     }
   }
 };
+
 
 async function handleVerification(member, guild, verificationConfig, client) {
     const { autoVerifyOnJoin } = await import('../services/verificationService.js');
@@ -210,6 +254,3 @@ async function assignRoleSafely(member, role) {
         logger.warn(`Failed to assign role ${role.id} to member ${member.id}:`, error);
     }
 }
-
-
-
